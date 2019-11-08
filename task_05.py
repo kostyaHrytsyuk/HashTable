@@ -21,14 +21,14 @@ class HashTable:
 
     def find_sum(self, s):
         if isinstance(self.h_table, HashTableChaining):
-            for i in range(self.h_table._get_table_size()):
+            for i in range(self.h_table.get_table_size()):
                 if self.h_table.table[i]:
                     for j in range(len(self.h_table.table[i])):
                         y = s - self.h_table.table[i][j]
                         if self.h_table.hash_search(y):
                             return self.h_table.table[i][j], y
         else:
-            for j in range(self.h_table._get_table_size()):
+            for j in range(self.h_table.get_table_size()):
                 if self.h_table.table[j]:
                     y = s - self.h_table.table[j]
                     if self.h_table.hash_search(y):
@@ -38,7 +38,9 @@ class HashTable:
 
 class MyHashTable:
     table = []
+    table_size = 0
     collisions = 0
+    gold = ((5 ** 0.5) - 1) / 2
 
     @abc.abstractmethod
     def hash(self, key):
@@ -46,14 +48,13 @@ class MyHashTable:
 
     @staticmethod
     def __get_golden_ratio():
-        return ((5 ** 0.5) - 1) / 2
+        return MyHashTable.gold
 
-    def _get_table_size(self):
-        res = len(self.table)
-        return res
+    def get_table_size(self):
+        return self.table_size
 
     def hash_division(self, key):
-        return key % self._get_table_size()
+        return key % self.get_table_size()
 
     def hash_multiplication(self, key):
         res = (key * self.__get_golden_ratio()) % 1
@@ -76,7 +77,8 @@ class HashTableChaining(MyHashTable):
 
 class HashTableDivision(HashTableChaining):
     def __init__(self, values):
-        self.table = [[] for _ in range(len(values))]
+        self.table_size = len(values)
+        self.table = [[] for _ in range(self.table_size)]
         for _ in range(len(values)):
             key = self.hash(values[_])
             if len(self.table[key]) != 0:
@@ -100,7 +102,8 @@ class HashTableDivision(HashTableChaining):
 class HashTableMultiplication(HashTableChaining):
 
     def __init__(self, values):
-        self.table = [[] for _ in range(3 * len(values))]
+        self.table_size = 3 * len(values)
+        self.table = [[] for _ in range(self.table_size)]
         for i in range(len(values)):
             key = self.hash(values[i])
             if len(self.table[key]) != 0:
@@ -124,7 +127,8 @@ class HashTableMultiplication(HashTableChaining):
 class HashTableProbing(MyHashTable):
 
     def __init__(self, values):
-        self.table = len(values) * [None]
+        self.table_size = 3*len(values)
+        self.table = self.table_size * [None]
 
     def hash(self, key):
         return super().hash_division(key)
@@ -141,39 +145,27 @@ class HashTableOpenAddressingLinearProbing(HashTableProbing):
 
     def __init__(self, values):
         super().__init__(values)
-        for i in range(len(values)):
-            self.insert(values[i])
+        for i in values:
+            self.insert(i)
 
     def hash_linear_probing(self, key, i):
         hashed_key = super().hash(key)
         return self.hash(hashed_key + i)
 
     def insert(self, val):
-        for n in range(len(self.table)):
-            key = super().hash_division(val)
-            if self.table[key]:
+        for i in range(self.get_table_size()):
+            key = super().hash_division(val + i)
+            if not self.table[key]:
                 self.table[key] = val
-            else:
-                self.collisions += 1
-                key += 1
-                while key < len(self.table):
-                    key = self.hash_linear_probing(val, key)
-                    if not self.table[key]:
-                        self.table[key] = val
-                        return
-                    key += 1
+                if i:
+                    self.collisions += 1
+                return
 
     def hash_search(self, y):
         for i in range(len(self.table)):
-            key = super().hash_division(y)
+            key = super().hash_division(y+i)
             if self.table[key] == y:
                 return True
-            else:
-                key += 1
-                while key < len(self.table):
-                    key = self.hash_linear_probing(y, key)
-                    if self.table[key] == y:
-                        return y
         return False
 
 
@@ -181,14 +173,16 @@ class HashTableOpenAddressingQuadraticProbing(HashTableProbing):
 
     def __init__(self, values):
         super().__init__(values)
-        for i in range(len(values)):
-            self.insert(values[i])
+        for i in values:
+            self.insert(i)
 
     def insert(self, val):
         for n in range(len(self.table)):
-            j = self.hash_quadratic_probing(val, n)
-            if not self.table[j]:
-                self.table[j] = val
+            key = self.hash_quadratic_probing(val, n)
+            if not self.table[key]:
+                self.table[key] = val
+                if n:
+                    self.collisions += 1
                 return
 
     def hash_quadratic_probing(self, key, i):
@@ -197,70 +191,77 @@ class HashTableOpenAddressingQuadraticProbing(HashTableProbing):
 
     def hash_search(self, y):
         for i in range(len(self.table)):
-                j = self.hash_quadratic_probing(y, i)
-                if self.table[j] == y:
-                    return y
-        return None
+            key = self.hash_quadratic_probing(y, i)
+            if self.table[key] == y:
+                return True
+        return False
 
 
 class HashTableOpenAddressingDoubleHashing(HashTableProbing):
 
     def __init__(self, values):
         super().__init__(values)
-        for i in range(len(values)):
-            self.insert(values[i])
+        for v in values:
+            self.insert(v)
 
     def insert(self, val):
-        for n in range(len(self.table)):
-            key = super().hash_division(val)
-            if self.table[key]:
+        for i in range(len(self.table)):
+            key = self.double_hash(val, i)
+            if not self.table[key]:
                 self.table[key] = val
-            else:
-                self.collisions += 1
-                counter = 0
-                while counter < len(self.table):
-                    key = 1 + self.double_hash(val, key)
-                    if not self.table[key]:
-                        self.table[key] = val
-                        return
-                    counter += 1
+                if i:
+                    self.collisions += 1
+                return
 
     def double_hash(self, key, i):
         first = self.add_hash_first(key)
         second = self.add_hash_second(key)
-        hash_code = (first + (second * (i + 1))) % 7
+        hash_code = (first + i*second) % self.get_table_size()
         return hash_code
 
     def hash_search(self, y):
-        for i in range(len(self.table)):
-            j = super().hash_division(y)
-            if self.table[j] == y:
+        for i in range(self.get_table_size()):
+            key = self.double_hash(y, i)
+            if self.table[key] == y:
                 return True
-            else:
-                counter = 0
-                while counter < len(self.table):
-                    j = 1 + self.double_hash(y, j)
-                    if self.table[j] == y:
-                        return True
-                    counter += 1
         return False
 
-    @staticmethod
-    def add_hash_first(key):
-        return key % 16
+    def add_hash_first(self, key):
+        return super().hash_multiplication(key)
 
-    @staticmethod
-    def add_hash_second(key):
-        return 1 + (key ** 2)
+    def add_hash_second(self, key):
+        return super().hash_division(key)
 
 
 # tbl = [[7, 5], [8, 4], [9, 3], [10, 2], [1, 10], [3, 15], [8, 10], [6, 4], [5, 3], [7, 3]]
 
-tbl = [42, 92, 13, 40, 46, 27, 33, 65, 33, 84]
+# tbl = [42, 92, 13, 40, 46, 27, 33, 65, 33, 84]
+
+tbl = [935583, 307802, 448044, 863500, 388299, 450806, 746099, 145384, 894059,
+     492800,
+     819086,
+     491917,
+     666340,
+     57760,
+     433480,
+     878064,
+     450806,
+     388299,
+     145384,
+     746099,
+     818203,
+     413597,
+     310503]
 
 h = HashTable(3, tbl)
 
-print(h.find_sum(108))
-print(h.find_sum(117))
-print(h.find_sum(134))
-print(h.find_sum(48))
+print(h.find_sum(879751))
+print(h.find_sum(1822307))
+print(h.find_sum(1240913))
+print(h.find_sum(1243385))
+print(h.find_sum(1311544))
+print(h.find_sum(839105))
+print(h.find_sum(891483))
+print(h.find_sum(1386859))
+print(h.find_sum(1311003))
+print(h.find_sum(724100))
